@@ -20,4 +20,5 @@ public interface IEmployeeRepository
     Task<bool> UpdateAsync(int id, EmployeeUpdateDto dto);
     Task<bool> TerminateAsync(int id);
     Task<List<LeaveRequestResponseDto>> GetLeaveRequestsAsync(int employeeId);
+    Task<bool> EmailExistsAsync(string email);
 }

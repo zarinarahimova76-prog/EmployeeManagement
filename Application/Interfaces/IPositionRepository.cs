@@ -9,4 +9,5 @@ public interface IPositionRepository
     Task<PositionResponseDto?> GetByIdAsync(int id);
 
     Task<int> CreateAsync(PositionCreateDto dto);
+    Task<bool> TitleExistsAsync(string title);
 }

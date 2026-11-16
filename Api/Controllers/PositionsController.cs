@@ -38,14 +38,26 @@ public class PositionsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(PositionCreateDto dto)
-    {
-        int id = await _repository.CreateAsync(dto);
+public async Task<IActionResult> Create(PositionCreateDto dto)
+{
+    bool titleExists = await _repository.TitleExistsAsync(dto.Title);
 
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = id },
-            new { id = id }
-        );
+    if (titleExists)
+    {
+        return Conflict("Position with this title already exists.");
     }
+
+    if (dto.MaxSalary < dto.MinSalary)
+    {
+        return BadRequest("Max salary cannot be less than min salary.");
+    }
+
+    int id = await _repository.CreateAsync(dto);
+
+    return CreatedAtAction(
+        nameof(GetById),
+        new { id = id },
+        new { id = id }
+    );
+}
 }

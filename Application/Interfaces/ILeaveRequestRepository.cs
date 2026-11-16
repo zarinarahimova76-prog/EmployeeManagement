@@ -11,4 +11,10 @@ public interface ILeaveRequestRepository
     Task<bool> ApproveAsync(int id);
 
     Task<bool> RejectAsync(int id);
+    Task<bool> IsEmployeeActiveAsync(int employeeId);
+    Task<bool> HasOverlappingLeaveAsync(
+    int employeeId,
+    DateTime startDate,
+    DateTime endDate
+);
 }

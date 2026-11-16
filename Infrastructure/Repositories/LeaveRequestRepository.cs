@@ -45,11 +45,21 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         using var connection = _database.Connection();
 
         string sql = @"
-            select *
-            from leave_requests
-            where (@Status is null or status = @Status)
-            order by id;
-        ";
+    select
+        lr.id as ""Id"",
+        lr.employee_id as ""EmployeeId"",
+        e.first_name || ' ' || e.last_name as ""EmployeeName"",
+        lr.leave_type as ""LeaveType"",
+        lr.start_date as ""StartDate"",
+        lr.end_date as ""EndDate"",
+        lr.status as ""Status"",
+        lr.reason as ""Reason"",
+        lr.created_at as ""CreatedAt""
+    from leave_requests lr
+    join employees e on e.id = lr.employee_id
+    where (@Status is null or lr.status = @Status)
+    order by lr.id;
+";
 
         var requests = await connection.QueryAsync<LeaveRequestResponseDto>(
             sql,
@@ -88,4 +98,51 @@ public class LeaveRequestRepository : ILeaveRequestRepository
 
         return rows > 0;
     }
+    public async Task<bool> IsEmployeeActiveAsync(int employeeId)
+{
+    using var connection = _database.Connection();
+
+    string sql = @"
+        select exists (
+            select 1
+            from employees
+            where id = @EmployeeId
+            and is_active = true
+        );
+    ";
+
+    return await connection.QuerySingleAsync<bool>(
+        sql,
+        new { EmployeeId = employeeId }
+    );
+}
+
+  public async Task<bool> HasOverlappingLeaveAsync(
+    int employeeId,
+    DateTime startDate,
+    DateTime endDate
+)
+{
+    using var connection = _database.Connection();
+
+    string sql = @"
+        select exists (
+            select 1
+            from leave_requests
+            where employee_id = @EmployeeId
+            and status in (1, 2)
+            and start_date <= @EndDate
+            and end_date >= @StartDate
+        );
+    ";
+
+    return await connection.QuerySingleAsync<bool>(sql, new
+    {
+        EmployeeId = employeeId,
+        StartDate = startDate,
+        EndDate = endDate
+    });
+}
+
+
 }

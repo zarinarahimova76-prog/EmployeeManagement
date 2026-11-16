@@ -38,16 +38,23 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(DepartmentCreateDto dto)
-    {
-        int id = await _repository.CreateAsync(dto);
+public async Task<IActionResult> Create(DepartmentCreateDto dto)
+{
+    bool nameExists = await _repository.NameExistsAsync(dto.Name);
 
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = id },
-            new { id = id }
-        );
+    if (nameExists)
+    {
+        return Conflict("Department with this name already exists.");
     }
+
+    int id = await _repository.CreateAsync(dto);
+
+    return CreatedAtAction(
+        nameof(GetById),
+        new { id = id },
+        new { id = id }
+    );
+}
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, DepartmentUpdateDto dto)
@@ -63,15 +70,24 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+public async Task<IActionResult> Delete(int id)
+{
+    var department = await _repository.GetByIdAsync(id);
+
+    if (department == null)
     {
-        bool deleted = await _repository.DeleteAsync(id);
-
-        if (!deleted)
-        {
-            return NotFound();
-        }
-
-        return NoContent();
+        return NotFound("Department not found.");
     }
+
+    bool hasActiveEmployees = await _repository.HasActiveEmployeesAsync(id);
+
+    if (hasActiveEmployees)
+    {
+        return Conflict("Cannot delete department with active employees.");
+    }
+
+    await _repository.DeleteAsync(id);
+
+    return NoContent();
+}
 }

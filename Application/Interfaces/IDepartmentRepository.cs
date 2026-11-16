@@ -13,4 +13,6 @@ public interface IDepartmentRepository
     Task<bool> UpdateAsync(int id, DepartmentUpdateDto dto);
 
     Task<bool> DeleteAsync(int id);
+    Task<bool> NameExistsAsync(string name);
+    Task<bool> HasActiveEmployeesAsync(int departmentId);
 }

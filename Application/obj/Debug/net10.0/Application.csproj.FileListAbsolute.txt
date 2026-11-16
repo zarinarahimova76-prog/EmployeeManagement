@@ -13,3 +13,4 @@
 /Users/rahimova/Desktop/EmployeeManagement/Application/obj/Debug/net10.0/refint/Application.dll
 /Users/rahimova/Desktop/EmployeeManagement/Application/obj/Debug/net10.0/Application.pdb
 /Users/rahimova/Desktop/EmployeeManagement/Application/obj/Debug/net10.0/ref/Application.dll
+/Users/rahimova/Desktop/EmployeeManagement/Application/obj/Debug/net10.0/Application.sourcelink.json

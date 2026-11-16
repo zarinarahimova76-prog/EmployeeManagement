@@ -1,4 +1,4 @@
-
+using Api.Middlewares;
 using Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +13,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

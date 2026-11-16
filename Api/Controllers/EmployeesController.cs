@@ -9,11 +9,19 @@ namespace Api.Controllers;
 public class EmployeesController : ControllerBase
 {
     private readonly IEmployeeRepository _repository;
+    private readonly IPositionRepository _positionRepository;
+    private readonly IDepartmentRepository _departmentRepository;
 
-    public EmployeesController(IEmployeeRepository repository)
-    {
-        _repository = repository;
-    }
+    public EmployeesController(
+    IEmployeeRepository repository,
+    IPositionRepository positionRepository,
+    IDepartmentRepository departmentRepository
+)
+{
+    _repository = repository;
+    _positionRepository = positionRepository;
+    _departmentRepository = departmentRepository;
+}
 
     [HttpGet]
     public async Task<IActionResult> GetAll(
@@ -63,6 +71,42 @@ public async Task<IActionResult> GetById(int id)
 [HttpPost]
 public async Task<IActionResult> Create(EmployeeCreateDto dto)
 {
+
+    if (dto.HireDate.Date > DateTime.Today)
+{
+    return BadRequest("Hire date cannot be in the future.");
+}
+var department = await _departmentRepository.GetByIdAsync(dto.DepartmentId);
+
+if (department == null)
+{
+    return NotFound("Department not found.");
+}
+
+if (department == null)
+{
+    return NotFound("Department not found.");
+}
+    var position = await _positionRepository.GetByIdAsync(dto.PositionId);
+
+    if (position == null)
+    {
+        return NotFound("Position not found.");
+    }
+
+    if (dto.Salary < position.MinSalary || dto.Salary > position.MaxSalary)
+    {
+        return BadRequest("Salary must be within the position salary range.");
+    }
+
+
+    bool emailExists = await _repository.EmailExistsAsync(dto.Email);
+
+if (emailExists)
+{
+    return Conflict("Employee with this email already exists.");
+}
+
     int id = await _repository.CreateAsync(dto);
 
     return CreatedAtAction(
@@ -73,15 +117,51 @@ public async Task<IActionResult> Create(EmployeeCreateDto dto)
 }
 
 
- [HttpPut("{id}")]
+[HttpPut("{id}")]
 public async Task<IActionResult> Update(int id, EmployeeUpdateDto dto)
 {
-    bool updated = await _repository.UpdateAsync(id, dto);
-
-    if (!updated)
+    if (dto.HireDate.Date > DateTime.Today)
     {
-        return NotFound();
+        return BadRequest("Hire date cannot be in the future.");
     }
+
+    var existingEmployee = await _repository.GetByIdAsync(id);
+
+    if (existingEmployee == null)
+    {
+        return NotFound("Employee not found.");
+    }
+
+    if (existingEmployee.Email != dto.Email)
+    {
+        bool emailExists = await _repository.EmailExistsAsync(dto.Email);
+
+        if (emailExists)
+        {
+            return Conflict("Employee with this email already exists.");
+        }
+    }
+
+    var department = await _departmentRepository.GetByIdAsync(dto.DepartmentId);
+
+    if (department == null)
+    {
+        return NotFound("Department not found.");
+    }
+
+    var position = await _positionRepository.GetByIdAsync(dto.PositionId);
+
+    if (position == null)
+    {
+        return NotFound("Position not found.");
+    }
+
+    if (dto.Salary < position.MinSalary || dto.Salary > position.MaxSalary)
+    {
+        return BadRequest("Salary must be within the position salary range.");
+    }
+
+    await _repository.UpdateAsync(id, dto);
 
     return NoContent();
 }
@@ -90,12 +170,19 @@ public async Task<IActionResult> Update(int id, EmployeeUpdateDto dto)
   [HttpPost("{id}/terminate")]
 public async Task<IActionResult> Terminate(int id)
 {
-    bool terminated = await _repository.TerminateAsync(id);
+    var employee = await _repository.GetByIdAsync(id);
 
-    if (!terminated)
+    if (employee == null)
     {
-        return NotFound();
+        return NotFound("Employee not found.");
     }
+
+    if (!employee.IsActive)
+    {
+        return Conflict("Employee is already terminated.");
+    }
+
+    await _repository.TerminateAsync(id);
 
     return NoContent();
 }

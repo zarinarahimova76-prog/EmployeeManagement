@@ -38,6 +38,25 @@ public class DepartmentRepository : IDepartmentRepository
         );
     }
 
+      
+      public async Task<bool> NameExistsAsync(string name)
+{
+    using var connection = _database.Connection();
+
+    string sql = @"
+        select exists(
+            select 1
+            from departments
+            where name = @Name
+        );
+    ";
+
+    return await connection.QuerySingleAsync<bool>(
+        sql,
+        new { Name = name }
+    );
+}
+
     public async Task<int> CreateAsync(DepartmentCreateDto dto)
     {
         using var connection = _database.Connection();
@@ -71,6 +90,26 @@ public class DepartmentRepository : IDepartmentRepository
 
         return rows > 0;
     }
+
+
+      public async Task<bool> HasActiveEmployeesAsync(int departmentId)
+{
+    using var connection = _database.Connection();
+
+    string sql = @"
+        select exists(
+            select 1
+            from employees
+            where department_id = @DepartmentId
+            and is_active = true
+        );
+    ";
+
+    return await connection.QuerySingleAsync<bool>(
+        sql,
+        new { DepartmentId = departmentId }
+    );
+}
 
     public async Task<bool> DeleteAsync(int id)
     {

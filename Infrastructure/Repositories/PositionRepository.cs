@@ -54,6 +54,25 @@ public class PositionRepository : IPositionRepository
         );
     }
 
+
+      public async Task<bool> TitleExistsAsync(string title)
+{
+    using var connection = _database.Connection();
+
+    string sql = @"
+        select exists(
+            select 1
+            from positions
+            where title = @Title
+        );
+    ";
+
+    return await connection.QuerySingleAsync<bool>(
+        sql,
+        new { Title = title }
+    );
+}
+
     public async Task<int> CreateAsync(PositionCreateDto dto)
     {
         using var connection = _database.Connection();

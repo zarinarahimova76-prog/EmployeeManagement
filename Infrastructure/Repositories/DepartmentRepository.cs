@@ -1,124 +1,107 @@
 
 using Application.Interfaces;
 using Application.DTOs.Departments;
+using Domain.Entities;
 using Infrastructure.Data;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
 public class DepartmentRepository : IDepartmentRepository
 {
-    private readonly Database _database;
+    private readonly AppDbContext _context;
 
-    public DepartmentRepository(Database database)
+    public DepartmentRepository(AppDbContext context)
     {
-        _database = database;
+        _context = context;
     }
 
     public async Task<List<DepartmentResponseDto>> GetAllAsync()
     {
-        using var connection = _database.Connection();
-
-        string sql = "select * from departments order by id";
-
-        var departments = await connection.QueryAsync<DepartmentResponseDto>(sql);
-
-        return departments.ToList();
+        return await _context.Departments
+            .OrderBy(d => d.Id)
+            .Select(d => new DepartmentResponseDto
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Description = d.Description,
+                CreatedAt = d.CreatedAt
+            })
+            .ToListAsync();
     }
 
     public async Task<DepartmentResponseDto?> GetByIdAsync(int id)
     {
-        using var connection = _database.Connection();
-
-        string sql = "select * from departments where id = @Id";
-
-        return await connection.QueryFirstOrDefaultAsync<DepartmentResponseDto>(
-            sql,
-            new { Id = id }
-        );
+        return await _context.Departments
+            .Where(d => d.Id == id)
+            .Select(d => new DepartmentResponseDto
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Description = d.Description,
+                CreatedAt = d.CreatedAt
+            })
+            .FirstOrDefaultAsync();
     }
 
-      
-      public async Task<bool> NameExistsAsync(string name)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select exists(
-            select 1
-            from departments
-            where name = @Name
-        );
-    ";
-
-    return await connection.QuerySingleAsync<bool>(
-        sql,
-        new { Name = name }
-    );
-}
+    public async Task<bool> NameExistsAsync(string name)
+    {
+        return await _context.Departments
+            .AnyAsync(d => d.Name == name);
+    }
 
     public async Task<int> CreateAsync(DepartmentCreateDto dto)
     {
-        using var connection = _database.Connection();
+        var department = new Department
+        {
+            Name = dto.Name,
+            Description = dto.Description,
+            CreatedAt = DateTime.UtcNow
+        };
 
-        string sql = @"
-            insert into departments (name, description)
-            values (@Name, @Description)
-            returning id;
-        ";
+        await _context.Departments.AddAsync(department);
+        await _context.SaveChangesAsync();
 
-        return await connection.QuerySingleAsync<int>(sql, dto);
+        return department.Id;
     }
 
     public async Task<bool> UpdateAsync(int id, DepartmentUpdateDto dto)
     {
-        using var connection = _database.Connection();
+        var department = await _context.Departments
+            .FirstOrDefaultAsync(d => d.Id == id);
 
-        string sql = @"
-            update departments
-            set name = @Name,
-                description = @Description
-            where id = @Id;
-        ";
-
-        int rows = await connection.ExecuteAsync(sql, new
+        if (department == null)
         {
-            Id = id,
-            dto.Name,
-            dto.Description
-        });
+            return false;
+        }
 
-        return rows > 0;
+        department.Name = dto.Name;
+        department.Description = dto.Description;
+
+        await _context.SaveChangesAsync();
+
+        return true;
     }
 
-
-      public async Task<bool> HasActiveEmployeesAsync(int departmentId)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select exists(
-            select 1
-            from employees
-            where department_id = @DepartmentId
-            and is_active = true
-        );
-    ";
-
-    return await connection.QuerySingleAsync<bool>(
-        sql,
-        new { DepartmentId = departmentId }
-    );
-}
+    public async Task<bool> HasActiveEmployeesAsync(int departmentId)
+    {
+        return await _context.Employees
+            .AnyAsync(e => e.DepartmentId == departmentId && e.IsActive);
+    }
 
     public async Task<bool> DeleteAsync(int id)
     {
-        using var connection = _database.Connection();
+        var department = await _context.Departments
+            .FirstOrDefaultAsync(d => d.Id == id);
 
-        string sql = "delete from departments where id = @Id";
+        if (department == null)
+        {
+            return false;
+        }
 
-        int rows = await connection.ExecuteAsync(sql, new { Id = id });
+        _context.Departments.Remove(department);
+        await _context.SaveChangesAsync();
 
-        return rows > 0;
+        return true;
     }
 }

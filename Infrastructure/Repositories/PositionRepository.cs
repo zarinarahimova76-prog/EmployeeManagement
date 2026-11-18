@@ -1,88 +1,67 @@
 
 using Application.Interfaces;
 using Application.DTOs.Positions;
+using Domain.Entities;
 using Infrastructure.Data;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
 public class PositionRepository : IPositionRepository
 {
-    private readonly Database _database;
+    private readonly AppDbContext _context;
 
-    public PositionRepository(Database database)
+    public PositionRepository(AppDbContext context)
     {
-        _database = database;
+        _context = context;
     }
 
     public async Task<List<PositionResponseDto>> GetAllAsync()
     {
-        using var connection = _database.Connection();
-
-        string sql = @"
-            select
-                id,
-                title,
-                min_salary as ""MinSalary"",
-                max_salary as ""MaxSalary""
-            from positions
-            order by id;
-        ";
-
-        var positions = await connection.QueryAsync<PositionResponseDto>(sql);
-
-        return positions.ToList();
+        return await _context.Positions
+            .OrderBy(p => p.Id)
+            .Select(p => new PositionResponseDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                MinSalary = p.MinSalary,
+                MaxSalary = p.MaxSalary
+            })
+            .ToListAsync();
     }
 
     public async Task<PositionResponseDto?> GetByIdAsync(int id)
     {
-        using var connection = _database.Connection();
-
-        string sql = @"
-            select
-                id,
-                title,
-                min_salary as ""MinSalary"",
-                max_salary as ""MaxSalary""
-            from positions
-            where id = @Id;
-        ";
-
-        return await connection.QueryFirstOrDefaultAsync<PositionResponseDto>(
-            sql,
-            new { Id = id }
-        );
+        return await _context.Positions
+            .Where(p => p.Id == id)
+            .Select(p => new PositionResponseDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                MinSalary = p.MinSalary,
+                MaxSalary = p.MaxSalary
+            })
+            .FirstOrDefaultAsync();
     }
 
-
-      public async Task<bool> TitleExistsAsync(string title)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select exists(
-            select 1
-            from positions
-            where title = @Title
-        );
-    ";
-
-    return await connection.QuerySingleAsync<bool>(
-        sql,
-        new { Title = title }
-    );
-}
+    public async Task<bool> TitleExistsAsync(string title)
+    {
+        return await _context.Positions
+            .AnyAsync(p => p.Title == title);
+    }
 
     public async Task<int> CreateAsync(PositionCreateDto dto)
     {
-        using var connection = _database.Connection();
+        var position = new Position
+        {
+            Title = dto.Title,
+            MinSalary = dto.MinSalary,
+            MaxSalary = dto.MaxSalary
+        };
 
-        string sql = @"
-            insert into positions (title, min_salary, max_salary)
-            values (@Title, @MinSalary, @MaxSalary)
-            returning id;
-        ";
+        await _context.Positions.AddAsync(position);
+        await _context.SaveChangesAsync();
 
-        return await connection.QuerySingleAsync<int>(sql, dto);
+        return position.Id;
     }
 }

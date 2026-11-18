@@ -1,296 +1,196 @@
-using Domain.Entities;
+using Application.DTOs.Employees;
 using Application.DTOs.LeaveRequests;
 using Application.Interfaces;
 using Application.Responses;
-using Application.DTOs.Employees;
 using Infrastructure.Data;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
 public class EmployeeRepository : IEmployeeRepository
 {
-    private readonly Database _database;
+    private readonly AppDbContext _context;
 
-    public EmployeeRepository(Database database)
+    public EmployeeRepository(AppDbContext context)
     {
-        _database = database;
+        _context = context;
     }
 
-   public async Task<PagedResult<EmployeeResponseDto>> GetAllAsync(
-    int? departmentId,
-    int? positionId,
-    string? search,
-    int page,
-    int pageSize
-)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select
-            e.id as ""Id"",
-            e.first_name as ""FirstName"",
-            e.last_name as ""LastName"",
-            e.email as ""Email"",
-            e.phone as ""Phone"",
-            e.hire_date as ""HireDate"",
-            e.salary as ""Salary"",
-            e.is_active as ""IsActive"",
-            e.department_id as ""DepartmentId"",
-            d.name as ""DepartmentName"",
-            e.position_id as ""PositionId"",
-            p.title as ""PositionTitle""
-        from employees e
-        join departments d on e.department_id = d.id
-        join positions p on e.position_id = p.id
-        where
-            (@DepartmentId is null or e.department_id = @DepartmentId)
-            and (@PositionId is null or e.position_id = @PositionId)
-            and (
-                @Search is null
-                or e.first_name ilike '%' || @Search || '%'
-                or e.last_name ilike '%' || @Search || '%'
-                or e.email ilike '%' || @Search || '%'
-            )
-        order by e.id
-        limit @PageSize
-        offset @Offset;
-    ";
-
-    var employees = await connection.QueryAsync<EmployeeResponseDto>(sql, new
+    public async Task<PagedResult<EmployeeResponseDto>> GetAllAsync(
+        int? departmentId,
+        int? positionId,
+        string? search,
+        int page,
+        int pageSize
+    )
     {
-        DepartmentId = departmentId,
-        PositionId = positionId,
-        Search = search,
-        PageSize = pageSize,
-        Offset = (page - 1) * pageSize
-    });
+        var query = _context.Employees
+            .AsNoTracking()
+            .AsQueryable();
 
-
-     string countSql = @"
-    select count(*)
-    from employees e
-    where
-        (@DepartmentId is null or e.department_id = @DepartmentId)
-        and (@PositionId is null or e.position_id = @PositionId)
-        and (
-            @Search is null
-            or e.first_name ilike '%' || @Search || '%'
-            or e.last_name ilike '%' || @Search || '%'
-            or e.email ilike '%' || @Search || '%'
-        );
-";
-
-int totalCount = await connection.QuerySingleAsync<int>(countSql, new
-{
-    DepartmentId = departmentId,
-    PositionId = positionId,
-    Search = search
-});
-
-    return new PagedResult<EmployeeResponseDto>
-{
-    Items = employees.ToList(),
-    Page = page,
-    PageSize = pageSize,
-    TotalCount = totalCount,
-    TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
-};
-}
-
-   
-
-public async Task<EmployeeResponseDto?> GetByIdAsync(int id)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select
-            e.id as ""Id"",
-            e.first_name as ""FirstName"",
-            e.last_name as ""LastName"",
-            e.email as ""Email"",
-            e.phone as ""Phone"",
-            e.hire_date as ""HireDate"",
-            e.salary as ""Salary"",
-            e.is_active as ""IsActive"",
-            e.department_id as ""DepartmentId"",
-            d.id as ""Id"",
-            d.name as ""Name"",
-            d.description as ""Description"",
-            d.created_at as ""CreatedAt"",
-            p.id as ""Id"",
-            p.title as ""Title"",
-            p.min_salary as ""MinSalary"",
-            p.max_salary as ""MaxSalary""
-        from employees e
-        join departments d on e.department_id = d.id
-        join positions p on e.position_id = p.id
-        where e.id = @Id;
-    ";
-
-    var result = await connection.QueryAsync<Employee, Department, Position, Employee>(
-        sql,
-        (employee, department, position) =>
+        if (departmentId.HasValue)
         {
-            employee.Department = department;
-            employee.Position = position;
+            query = query.Where(e => e.DepartmentId == departmentId.Value);
+        }
 
-            return employee;
-        },
-        new { Id = id },
-        splitOn: "Id,Id"
-    );
+        if (positionId.HasValue)
+        {
+            query = query.Where(e => e.PositionId == positionId.Value);
+        }
 
-    var employeeResult = result.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            string searchTerm = $"%{search.Trim()}%";
 
-    if (employeeResult == null)
-    {
-        return null;
+            query = query.Where(e =>
+                EF.Functions.ILike(e.FirstName, searchTerm) ||
+                EF.Functions.ILike(e.LastName, searchTerm) ||
+                EF.Functions.ILike(e.Email, searchTerm)
+            );
+        }
+
+        int totalCount = await query.CountAsync();
+
+        var employees = await query
+            .OrderBy(e => e.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(e => new EmployeeResponseDto
+            {
+                Id = e.Id,
+                FirstName = e.FirstName,
+                LastName = e.LastName,
+                Email = e.Email,
+                Phone = e.Phone,
+                HireDate = e.HireDate,
+                Salary = e.Salary,
+                IsActive = e.IsActive,
+                DepartmentId = e.DepartmentId,
+                DepartmentName = e.Department!.Name,
+                PositionId = e.PositionId,
+                PositionTitle = e.Position!.Title
+            })
+            .ToListAsync();
+
+        return new PagedResult<EmployeeResponseDto>
+        {
+            Items = employees,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+        };
     }
 
-    return new EmployeeResponseDto
+    public async Task<EmployeeResponseDto?> GetByIdAsync(int id)
     {
-        Id = employeeResult.Id,
-        FirstName = employeeResult.FirstName,
-        LastName = employeeResult.LastName,
-        Email = employeeResult.Email,
-        Phone = employeeResult.Phone,
-        HireDate = employeeResult.HireDate,
-        Salary = employeeResult.Salary,
-        IsActive = employeeResult.IsActive,
-        DepartmentId = employeeResult.DepartmentId,
-        DepartmentName = employeeResult.Department?.Name,
-        PositionId = employeeResult.PositionId,
-        PositionTitle = employeeResult.Position?.Title
-    };
-}
-
+        return await _context.Employees
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => new EmployeeResponseDto
+            {
+                Id = e.Id,
+                FirstName = e.FirstName,
+                LastName = e.LastName,
+                Email = e.Email,
+                Phone = e.Phone,
+                HireDate = e.HireDate,
+                Salary = e.Salary,
+                IsActive = e.IsActive,
+                DepartmentId = e.DepartmentId,
+                DepartmentName = e.Department!.Name,
+                PositionId = e.PositionId,
+                PositionTitle = e.Position!.Title
+            })
+            .FirstOrDefaultAsync();
+    }
 
     public async Task<bool> EmailExistsAsync(string email)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select exists(
-            select 1
-            from employees
-            where email = @Email
-        );
-    ";
-
-    return await connection.QuerySingleAsync<bool>(
-        sql,
-        new { Email = email }
-    );
-}
-
-public async Task<int> CreateAsync(EmployeeCreateDto dto)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        insert into employees (
-            first_name,
-            last_name,
-            email,
-            phone,
-            hire_date,
-            salary,
-            department_id,
-            position_id
-        )
-        values (
-            @FirstName,
-            @LastName,
-            @Email,
-            @Phone,
-            @HireDate,
-            @Salary,
-            @DepartmentId,
-            @PositionId
-        )
-        returning id;
-    ";
-
-    return await connection.QuerySingleAsync<int>(sql, dto);
-}
-   
-
-   public async Task<bool> UpdateAsync(int id, EmployeeUpdateDto dto)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        update employees
-        set first_name = @FirstName,
-            last_name = @LastName,
-            email = @Email,
-            phone = @Phone,
-            hire_date = @HireDate,
-            salary = @Salary,
-            department_id = @DepartmentId,
-            position_id = @PositionId
-        where id = @Id;
-    ";
-
-    int rows = await connection.ExecuteAsync(sql, new
     {
-        Id = id,
-        dto.FirstName,
-        dto.LastName,
-        dto.Email,
-        dto.Phone,
-        dto.HireDate,
-        dto.Salary,
-        dto.DepartmentId,
-        dto.PositionId
-    });
+        return await _context.Employees
+            .AnyAsync(e => e.Email == email);
+    }
 
-    return rows > 0;
-}
-    
-     public async Task<bool> TerminateAsync(int id)
-{
-    using var connection = _database.Connection();
+    public async Task<int> CreateAsync(EmployeeCreateDto dto)
+    {
+        var employee = new Domain.Entities.Employee
+        {
+            FirstName = dto.FirstName,
+            LastName = dto.LastName,
+            Email = dto.Email,
+            Phone = dto.Phone,
+            HireDate = dto.HireDate,
+            Salary = dto.Salary,
+            DepartmentId = dto.DepartmentId,
+            PositionId = dto.PositionId,
+            IsActive = true
+        };
 
-    string sql = @"
-        update employees
-        set is_active = false
-        where id = @Id and is_active = true;
-    ";
+        await _context.Employees.AddAsync(employee);
+        await _context.SaveChangesAsync();
 
-    int rows = await connection.ExecuteAsync(sql, new { Id = id });
+        return employee.Id;
+    }
 
-    return rows > 0;
-}
+    public async Task<bool> UpdateAsync(int id, EmployeeUpdateDto dto)
+    {
+        var employee = await _context.Employees
+            .FirstOrDefaultAsync(e => e.Id == id);
 
+        if (employee == null)
+        {
+            return false;
+        }
+
+        employee.FirstName = dto.FirstName;
+        employee.LastName = dto.LastName;
+        employee.Email = dto.Email;
+        employee.Phone = dto.Phone;
+        employee.HireDate = dto.HireDate;
+        employee.Salary = dto.Salary;
+        employee.DepartmentId = dto.DepartmentId;
+        employee.PositionId = dto.PositionId;
+
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<bool> TerminateAsync(int id)
+    {
+        var employee = await _context.Employees
+            .FirstOrDefaultAsync(e => e.Id == id && e.IsActive);
+
+        if (employee == null)
+        {
+            return false;
+        }
+
+        employee.IsActive = false;
+
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
 
     public async Task<List<LeaveRequestResponseDto>> GetLeaveRequestsAsync(int employeeId)
-{
-    using var connection = _database.Connection();
-
-    string sql = @"
-        select
-            id,
-            employee_id as ""EmployeeId"",
-            leave_type as ""LeaveType"",
-            start_date as ""StartDate"",
-            end_date as ""EndDate"",
-            status,
-            reason,
-            created_at as ""CreatedAt""
-        from leave_requests
-        where employee_id = @EmployeeId
-        order by id;
-    ";
-
-    var requests = await connection.QueryAsync<LeaveRequestResponseDto>(
-        sql,
-        new { EmployeeId = employeeId }
-    );
-
-    return requests.ToList();
-}
+    {
+        return await _context.LeaveRequests
+            .AsNoTracking()
+            .Where(lr => lr.EmployeeId == employeeId)
+            .OrderBy(lr => lr.Id)
+            .Select(lr => new LeaveRequestResponseDto
+            {
+                Id = lr.Id,
+                EmployeeId = lr.EmployeeId,
+                EmployeeName = lr.Employee!.FirstName + " " + lr.Employee.LastName,
+                LeaveType = lr.LeaveType,
+                StartDate = lr.StartDate,
+                EndDate = lr.EndDate,
+                Status = lr.Status,
+                Reason = lr.Reason,
+                CreatedAt = lr.CreatedAt
+            })
+            .ToListAsync();
+    }
 }

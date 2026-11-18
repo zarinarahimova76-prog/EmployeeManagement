@@ -19,10 +19,15 @@ public class Employee
 
     public bool IsActive { get; set; } = true;
 
+    // Foreign Keys
     public int DepartmentId { get; set; }
 
     public int PositionId { get; set; }
+
+    // Navigation Properties
     public Department? Department { get; set; }
 
     public Position? Position { get; set; }
+
+    public ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
 }

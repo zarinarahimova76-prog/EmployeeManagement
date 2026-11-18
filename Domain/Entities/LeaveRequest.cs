@@ -7,6 +7,7 @@ public class LeaveRequest
 {
     public int Id { get; set; }
 
+    // Foreign Key
     public int EmployeeId { get; set; }
 
     public LeaveType LeaveType { get; set; }
@@ -20,4 +21,7 @@ public class LeaveRequest
     public string? Reason { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    // Navigation Property
+    public Employee? Employee { get; set; }
 }

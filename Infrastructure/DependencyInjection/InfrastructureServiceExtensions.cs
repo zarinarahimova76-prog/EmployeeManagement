@@ -2,6 +2,7 @@
 using Application.Interfaces;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.DependencyInjection;
@@ -13,8 +14,8 @@ public static class InfrastructureServiceExtensions
         string connectionString
     )
     {
-        services.AddSingleton<Database>(provider =>
-            new Database(connectionString)
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(connectionString)
         );
 
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
